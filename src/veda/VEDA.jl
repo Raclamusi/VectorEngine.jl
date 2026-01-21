@@ -19,10 +19,14 @@ module VEDA
 
         function VEContext(dev)
             r_handle = Ref{VEDAcontext}()
-            @check vedaDevicePrimaryCtxRetain(r_handle, dev)
+            mode = VEDA_CONTEXT_MODE_OMP
+            if haskey(ENV, "VE_CONTEXT_MODE") && ENV["VE_CONTEXT_MODE"] == "SCALAR"
+                mode = VEDA_CONTEXT_MODE_SCALAR
+            end
+            @check vedaCtxCreate(r_handle, mode, dev)
             ctx = new(r_handle[])
             finalizer(ctx) do ctx
-                vedaDevicePrimaryCtxRelease(ctx.handle)
+                vedaCtxDestroy(ctx.handle)
             end
         end
     end
