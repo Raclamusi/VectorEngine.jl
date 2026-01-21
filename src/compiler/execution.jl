@@ -39,7 +39,7 @@ macro veda(ex...)
     macro_kwargs, compiler_kwargs, call_kwargs, other_kwargs =
         split_kwargs(kwargs,
                      [:launch],
-                     [:name, :global_hooks],
+                     [:name, :global_hooks, :device, :kernel],
                      [:stream])
     if !isempty(other_kwargs)
         key,val = first(other_kwargs).args
@@ -198,8 +198,8 @@ in a hot path without degrading performance. New code will be generated automati
 function definitions change, or when different types or keyword arguments are provided.
 """
 function vefunction(f::Core.Function, tt::Type=Tuple{}; name=nothing, device=0,
-                    global_hooks=NamedTuple(), kwargs...)
-    source = FunctionSpec(f, tt, true, name)
+                    global_hooks=NamedTuple(), kernel=true, kwargs...)
+    source = FunctionSpec(f, tt, kernel, name)
     cache = get!(()->Dict{UInt,Any}(), vefunction_cache, device)
     #isa = default_isa(device)
     target = VECompilerTarget()
