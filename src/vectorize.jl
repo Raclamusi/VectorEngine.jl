@@ -35,7 +35,7 @@ macro vectorize(expr...)
     N = 0
     ivdep = false
     for arg in args
-        if arg.head == :(=) && arg.args[1] == :length
+        if typeof(arg) === Expr && arg.head == :(=) && arg.args[1] == :length
             if arg.args[2] isa Integer
                 N = arg.args[2]
             else
