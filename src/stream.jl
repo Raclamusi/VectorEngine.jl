@@ -2,7 +2,7 @@
 
 export VEStream, VEDefaultStream, synchronize
 
-using .VEDA: VEDAstream, vedaStreamSynchronize, ERROR_VEO_COMMAND_EXCEPTION, ERROR_VEO_COMMAND_ERROR
+using .VEDA: VEDAstream, vedaStreamSynchronize, vedaCtxSynchronize, ERROR_VEO_COMMAND_EXCEPTION, ERROR_VEO_COMMAND_ERROR
 
 mutable struct VEStream
     handle::VEDAstream
@@ -43,4 +43,11 @@ Throw an exception if something went very wrong.
     end
 end
 
-@inline synchronize() = synchronize(VEDefaultStream())
+@inline function synchronize()
+    err = vedaCtxSynchronize()
+    if err == ERROR_VEO_COMMAND_EXCEPTION
+        throw(VEContextException("VE context died with an exception"))
+    elseif err == ERROR_VEO_COMMAND_ERROR
+        throw(VEOCommandError("VH side VEO command error"))
+    end
+end
