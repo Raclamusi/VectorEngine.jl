@@ -109,7 +109,7 @@ Base.sizeof(x::VEArray) = Base.elsize(x) * length(x)
 ## derived types
 
 export VEDenseArray, VEDenseVector, VEDenseMatrix, VEDenseVecOrMat,
-       VEDenseArray, VEDenseVector, VEDenseMatrix, VEDenseVecOrMat,
+       VEStridedArray, VEStridedVector, VEStridedMatrix, VEStridedVecOrMat,
        VEWrappedArray, VEWrappedVector, VEWrappedMatrix, VEWrappedVecOrMat
 
 VEContiguousSubArray{T,N,A<:VEArray} = Base.FastContiguousSubArray{T,N,A}
