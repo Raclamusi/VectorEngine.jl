@@ -180,8 +180,20 @@ Base.unsafe_convert(::Type{VEPtr{T}}, x::VEArray{T}) where {T} = reinterpret(VEP
 
 ## interop with GPU arrays
 
+function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::VEArray{T,N}) where {T,N}
+  VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, a.buf.ptr))
+end
+
+function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::SubArray{T,N,P,<:Tuple{Vararg{Base.RangeIndex}}}) where {T,N,P}
+  VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr + Base._memory_offset(parent(a), map(first, a.indices)...)))
+end
+
+function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::SubArray{T,N,P,<:Tuple{Vararg{Union{Base.RangeIndex,Base.ReshapedUnitRange}}}}) where {T,N,P}
+  VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr + (Base.first_index(a)-1)*sizeof(T)))
+end
+
 function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::VEDenseArray{T,N}) where {T,N}
-    VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, a.buf.ptr))
+  VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr))
 end
 
 Adapt.adapt_storage(::Adaptor, xs::VEArray{T,N}) where {T,N} =
