@@ -14,7 +14,7 @@ for method in (:code_typed, :code_warntype, :code_llvm, :code_native)
 
     @eval begin
         function $method(io::IO, @nospecialize(func), @nospecialize(types);
-                         kernel::Bool=false, device=current_device(), kwargs...)
+                         kernel::Bool=false, device=0, kwargs...)
             source = FunctionSpec(func, Base.to_tuple_type(types), kernel)
             target = VECompilerTarget()
             params = VECompilerParams(device, NamedTuple(), rv_loop_vectorize!)
