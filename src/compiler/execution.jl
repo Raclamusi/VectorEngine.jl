@@ -183,6 +183,83 @@ end
 
 using LLVM, LLVM.Interop # for the correct definition of isghosttype
 
+struct llvm_Optional{T}
+    value::T
+    hasVal::Bool
+end
+
+function llvm_VPIntrinsic_isVPIntrinsic(ID)
+    ccall((:_ZN4llvm11VPIntrinsic13isVPIntrinsicEj, LLVM.libllvm), Bool, (Cuint,), ID)
+end
+
+function llvm_VPIntrinsic_getFunctionalOpcodeForVP(ID)
+    ccall((:_ZN4llvm11VPIntrinsic24getFunctionalOpcodeForVPEj, LLVM.libllvm), llvm_Optional{Cuint}, (Cuint,), ID)
+end
+
+function llvm_Instruction_setFast(this, B)
+    ccall((:_ZN4llvm11Instruction7setFastEb, LLVM.libllvm), Cvoid, (LLVM.API.LLVMValueRef, Bool), this, B)
+end
+
+# from llvm/include/llvm/IR/Instruction.def
+const map_to_llvmopcode = map(op -> (@eval LLVM.API.$(Symbol(:LLVM, op))), [
+    # TERM_INST
+    :Ret, :Br, :Switch, :IndirectBr, :Invoke, :Resume, :Unreachable, :CleanupRet, :CatchRet, :CatchSwitch, :CallBr,
+    # UNARY_INST
+    :FNeg,
+    # BINARY_INST
+    :Add, :FAdd, :Sub, :FSub, :Mul, :FMul, :UDiv, :SDiv, :FDiv, :URem, :SRem, :FRem, :Shl, :LShr, :AShr, :And, :Or, :Xor,
+    # MEMORY_INST
+    :Alloca, :Load, :Store, :GetElementPtr, :Fence, :AtomicCmpXchg, :AtomicRMW,
+    # CAST_INST
+    :Trunc, :ZExt, :SExt, :FPToUI, :FPToSI, :UIToFP, :SIToFP, :FPTrunc, :FPExt, :PtrToInt, :IntToPtr, :BitCast, :AddrSpaceCast,
+    # FUNCLETPAD_INST
+    :CleanupPad, :CatchPad,
+    # OTHER_INST
+    :ICmp, :FCmp, :PHI, :Call, :Select, :UserOp1, :UserOp2, :VAArg, :ExtractElement, :InsertElement, :ShuffleVector, :ExtractValue, :InsertValue, :LandingPad, :Freeze,
+])
+
+function is_fp_math_operator(inst::LLVM.Instruction)
+    op = opcode(inst)
+    if LLVM.API.LLVMIsAIntrinsicInst(inst) != C_NULL
+        id = LLVM.API.LLVMGetIntrinsicID(called_value(inst)::LLVM.Function)
+        if llvm_VPIntrinsic_isVPIntrinsic(id)
+            op_opt = llvm_VPIntrinsic_getFunctionalOpcodeForVP(id)
+            op = (op_opt.hasVal ? map_to_llvmopcode[op_opt.value] : LLVM.API.LLVMCall)
+        end
+    end
+
+    if op in [LLVM.API.LLVMFNeg, LLVM.API.LLVMFAdd, LLVM.API.LLVMFSub, LLVM.API.LLVMFMul, LLVM.API.LLVMFDiv, LLVM.API.LLVMFRem, LLVM.API.LLVMFCmp]
+        return true
+    elseif op in [LLVM.API.LLVMPHI, LLVM.API.LLVMSelect, LLVM.API.LLVMCall]
+        ty = LLVM.llvmtype(inst)
+        while ty isa LLVM.ArrayType
+            ty = eltype(ty)
+        end
+        if ty isa LLVM.VectorType
+            ty = eltype(ty)
+        end
+        return (ty isa LLVM.FloatingPointType)
+    else
+        return false
+    end
+end
+
+function force_fast_math!(mod::LLVM.Module)
+    changed = false
+    for f in functions(mod), bb in blocks(f), inst in instructions(bb)
+        if is_fp_math_operator(inst)
+            llvm_Instruction_setFast(inst, true)
+            changed = true
+        end
+    end
+    return changed
+end
+
+function fast_loop_vectorize!(pm::LLVM.PassManager)
+    rv_loop_vectorize!(pm)
+    add!(pm, LLVM.ModulePass("ForceFastMath", force_fast_math!))
+end
+
 """
     vefunction(f, tt=Tuple{}; kwargs...)
 
@@ -203,7 +280,7 @@ function vefunction(f::Core.Function, tt::Type=Tuple{}; name=nothing, device=0,
     cache = get!(()->Dict{UInt,Any}(), vefunction_cache, device)
     #isa = default_isa(device)
     target = VECompilerTarget()
-    params = VECompilerParams(device, global_hooks, rv_loop_vectorize!)
+    params = VECompilerParams(device, global_hooks, fast_loop_vectorize!)
     job = CompilerJob(target, source, params)
     GPUCompiler.cached_compilation(cache, job, vefunction_compile, vefunction_link)::HostKernel{f,tt}
 end
