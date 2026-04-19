@@ -217,9 +217,9 @@ Adapt.adapt_storage(::Type{<:VEArray{T}}, xs::AbstractArray) where {T} =
 
 Adapt.adapt_storage(::Type{Array}, xs::VEArray) = convert(Array, xs)
 
-Base.collect(x::VEArray{T,N}) where {T,N} = copyto!(Array{T,N}(undef, size(x)), x)
+Base.collect(x::VEDenseArray{T,N}) where {T,N} = copyto!(Array{T,N}(undef, size(x)), x)
 
-function Base.copyto!(dest::VEArray{T}, doffs::Integer, src::Array{T}, soffs::Integer,
+function Base.copyto!(dest::VEDenseArray{T}, doffs::Integer, src::Array{T}, soffs::Integer,
                       n::Integer) where T
   n==0 && return dest
   @boundscheck checkbounds(dest, doffs)
