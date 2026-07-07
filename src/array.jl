@@ -192,9 +192,9 @@ function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::SubArray{T
   VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr + (Base.first_index(a)-1)*sizeof(T)))
 end
 
-function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::VEDenseArray{T,N}) where {T,N}
-  VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr))
-end
+# function Base.unsafe_convert(::Type{VEDeviceArray{T,N,AS.Global}}, a::VEDenseArray{T,N}) where {T,N}
+#   VEDeviceArray{T,N,AS.Global}(size(a), reinterpret(LLVMPtr{T,AS.Global}, parent(a).buf.ptr))
+# end
 
 Adapt.adapt_storage(::Adaptor, xs::VEArray{T,N}) where {T,N} =
   Base.unsafe_convert(VEDeviceArray{T,N,AS.Global}, xs)
