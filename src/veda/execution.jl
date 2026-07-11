@@ -16,7 +16,6 @@ function Base.setindex!(args::VEArgs, val::Float32, idx::Integer)
 end
 
 function Base.setindex!(args::VEArgs, val::Float64, idx::Integer)
-    @debug("setindex Float64 $idx")
     vedaArgsSetF64(args.handle, idx, val)
     val
 end
@@ -37,7 +36,6 @@ function Base.setindex!(args::VEArgs, val::Int32, idx::Integer)
 end
 
 function Base.setindex!(args::VEArgs, val::Int64, idx::Integer)
-    @debug("setindex Int64 $idx")
     vedaArgsSetI64(args.handle, idx, val)
     val
 end
@@ -87,9 +85,7 @@ end
 
 # Pass structs on stack. If mutable, modified elements can be passed back, too.
 function Base.setindex!(args::VEArgs, val::T, idx::Integer) where {T}
-    @debug("args setindex! idx=$idx T=$T val=$val")
     if isstructtype(T) && Base.datatype_pointerfree(T) # Pointers within structs can not be de-referenced
-        @debug("arg $idx val=$val handled as struct")
         intent = ismutable(val) ? VEDA_ARGS_INTENT_INOUT : VEDA_ARGS_INTENT_IN
         ref = Ref(val)
         push!(args.objs, ref) # root the reference
@@ -97,16 +93,13 @@ function Base.setindex!(args::VEArgs, val::T, idx::Integer) where {T}
         vedaArgsSetStack(args.handle, idx, ptr, intent, sizeof(T))
         val
     elseif T <: Base.RefValue && isassigned(val)
-        @debug("arg $idx val=$val handled as RefValue")
         intent = ismutable(val[]) ? VEDA_ARGS_INTENT_INOUT : VEDA_ARGS_INTENT_IN
         push!(args.objs, val) # root the reference
         ptr = Base.unsafe_convert(Ptr{Cvoid}, val)
         sz = sizeof(val[])
-        @debug "converted ptr = $ptr size=$sz"
         vedaArgsSetStack(args.handle, idx, ptr, intent, sizeof(val[]))
         val
     elseif T <: Ptr{Nothing}
-        @debug("arg $idx val=$val handled as Ptr{Nothing}")
         args[idx] = Base.bitcast(UInt64, val)
         val
     else
