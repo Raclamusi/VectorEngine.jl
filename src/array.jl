@@ -148,7 +148,7 @@ VEWrappedVecOrMat{T} = Union{VEWrappedVector{T}, VEWrappedMatrix{T}}
 
 @inline function VEArray{T,N}(xs::AbstractArray{<:Any,N}) where {T,N}
   A = VEArray{T,N}(undef, size(xs))
-  copyto!(A, convert(Array{T}, xs))
+  @inbounds copyto!(A, convert(Array{T}, xs))
   return A
 end
 
@@ -217,7 +217,7 @@ Adapt.adapt_storage(::Type{<:VEArray{T}}, xs::AbstractArray) where {T} =
 
 Adapt.adapt_storage(::Type{Array}, xs::VEArray) = convert(Array, xs)
 
-Base.collect(x::VEDenseArray{T,N}) where {T,N} = copyto!(Array{T,N}(undef, size(x)), x)
+Base.collect(x::VEDenseArray{T,N}) where {T,N} = @inbounds copyto!(Array{T,N}(undef, size(x)), x)
 
 function Base.copyto!(dest::VEDenseArray{T}, doffs::Integer, src::Array{T}, soffs::Integer,
                       n::Integer) where T
@@ -230,7 +230,7 @@ function Base.copyto!(dest::VEDenseArray{T}, doffs::Integer, src::Array{T}, soff
   return dest
 end
 
-Base.copyto!(dest::VEDenseArray{T}, src::Array{T}) where {T} =
+Base.@propagate_inbounds Base.copyto!(dest::VEDenseArray{T}, src::Array{T}) where {T} =
     copyto!(dest, 1, src, 1, length(src))
 
 function Base.copyto!(dest::Array{T}, doffs::Integer, src::VEDenseArray{T}, soffs::Integer,
@@ -244,7 +244,7 @@ function Base.copyto!(dest::Array{T}, doffs::Integer, src::VEDenseArray{T}, soff
   return dest
 end
 
-Base.copyto!(dest::Array{T}, src::VEDenseArray{T}) where {T} =
+Base.@propagate_inbounds Base.copyto!(dest::Array{T}, src::VEDenseArray{T}) where {T} =
     copyto!(dest, 1, src, 1, length(src))
 
 function Base.copyto!(dest::VEDenseArray{T}, doffs::Integer, src::VEDenseArray{T}, soffs::Integer,
@@ -259,7 +259,7 @@ function Base.copyto!(dest::VEDenseArray{T}, doffs::Integer, src::VEDenseArray{T
   return dest
 end
 
-Base.copyto!(dest::VEDenseArray{T}, src::VEDenseArray{T}) where {T} =
+Base.@propagate_inbounds Base.copyto!(dest::VEDenseArray{T}, src::VEDenseArray{T}) where {T} =
     copyto!(dest, 1, src, 1, length(src))
 
 function Base.unsafe_copyto!(      # not needed # ctx::ZeContext, dev::ZeDevice,
