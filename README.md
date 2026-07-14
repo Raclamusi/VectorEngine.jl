@@ -34,14 +34,14 @@ once nearing the latest GPUCompiler version and julia-1.9, which requires LLVM-1
 
 Start with cloning the VectorEngine.jl project:
 ```
-git clone git@github.com:sx-aurora-dev/VectorEngine.jl.git
+git clone https://github.com/Raclamusi/VectorEngine.jl.git
 cd VectorEngine.jl
 ```
 
 Now clone the matching Julia branch inside the VectorEngine.jl directory. The location is,
 of course, a matter of taste, I prefer to keep them together while developing.
 ```
-git clone -b ef/ve-llvm14-release-1.8 git@github.com:efocht/julia.git
+git clone -b ef/ve-llvm14-release-1.8 https://github.com/efocht/julia.git
 mkdir builds
 cd julia
 make O=`pwd`/../builds/julia-ve configure
@@ -59,11 +59,12 @@ LLVM_ASSERTIONS=1
 LLVM_DEBUG=2
 DEPS_GIT=llvm
 override LLVM_VER = 14.0.0
-override LLVM_BRANCH=hpce/release_2.2.0_julia
-override LLVM_SHA1=hpce/release_2.2.0_julia
-override LLVM_GIT_URL=https://github.com/sx-aurora-dev/llvm-project
+override LLVM_BRANCH=hpce/release_2.2.0_julia-fix
+override LLVM_SHA1=hpce/release_2.2.0_julia-fix
+override LLVM_GIT_URL=https://github.com/Raclamusi/llvm-ve.git
 #override LLVM_TARGETS=host;WebAssembly;NVPTX;AMDGPU;BPF;VE
 override LLVM_TARGETS=host;VE
+JULIA_CPU_TARGET=generic;sandybridge;haswell;znver2;skylake-avx512
 EOF
 ```
 Only the architecture targets `host` (x86_64) and `VE` are enabled because the others were
