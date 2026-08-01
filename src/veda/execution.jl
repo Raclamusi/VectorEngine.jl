@@ -118,8 +118,13 @@ end
     end
 
     # veargs is zero indexed
+    j = 0
     for i in 1:length(args)
-        push!(ex.args, :(veargs[$(i-1)] = args[$i]))
+        # Arguments of size 0 are removed during compilation
+        if sizeof(args[i]) > 0
+            push!(ex.args, :(veargs[$(j)] = args[$i]))
+            j += 1
+        end
     end
 
     return ex
