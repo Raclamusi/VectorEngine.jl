@@ -6,7 +6,7 @@ module Mem
 
 using ..VectorEngine
 using ..VectorEngine.VEDA: vedaMemAlloc, vedaMemPtr, vedaMemFree, vedaMemGetInfo,
-    vedaMemAllocHost, vedaMemFreeHost
+    vedaMemAllocHost, vedaMemFreeHost, VEContext, context, context!
     
 using Printf
 
@@ -43,8 +43,9 @@ mutable struct DeviceBuffer <: AbstractBuffer
     vptr::VEPtr{Int8}
     ptr::VEPtr{Int8}
     bytesize::Int
+    ctx::VEContext
     function DeviceBuffer(bsize::Int)
-        bsize == 0 && return new(VE_NULL, VE_NULL, 0)
+        bsize == 0 && return new(VE_NULL, VE_NULL, 0, context())
 
         #vp = Ref{VEDAdeviceptr}()
         vp = Ref{VEPtr{Int8}}(0)
@@ -52,7 +53,7 @@ mutable struct DeviceBuffer <: AbstractBuffer
         vedaMemAlloc(pointer_from_objref(vp), bsize)
         vedaMemPtr(pointer_from_objref(p), vp[])
         #VectorEngine.vesync()      # is this needed?
-        obj = new(vp[], p[], bsize)
+        obj = new(vp[], p[], bsize, context())
         finalizer(unsafe_free!, obj)
         return obj
     end
@@ -60,9 +61,11 @@ end
 
 function unsafe_free!(buf::DeviceBuffer)
     if pointer(buf) != VE_NULL
-        vedaMemFree(pointer(buf))
-        buf.vptr = VE_NULL
-        buf.ptr = VE_NULL
+        context!(buf.ctx) do
+            vedaMemFree(pointer(buf))
+            buf.vptr = VE_NULL
+            buf.ptr = VE_NULL
+        end
     end
 end
 

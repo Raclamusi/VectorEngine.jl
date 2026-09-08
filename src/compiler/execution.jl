@@ -274,7 +274,7 @@ The output of this function is automatically cached, i.e. you can simply call `v
 in a hot path without degrading performance. New code will be generated automatically, when
 function definitions change, or when different types or keyword arguments are provided.
 """
-function vefunction(f::Core.Function, tt::Type=Tuple{}; name=nothing, device=0,
+function vefunction(f::Core.Function, tt::Type=Tuple{}; name=nothing, device=deviceid(VEDA.device()),
                     global_hooks=NamedTuple(), kernel=true, kwargs...)
     source = FunctionSpec(f, tt, kernel, name)
     cache = get!(()->Dict{UInt,Any}(), vefunction_cache, device)

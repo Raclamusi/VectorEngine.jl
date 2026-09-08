@@ -70,8 +70,7 @@ module VEDA
     end
 
     include("execution.jl")
-
-    const pctx = Ref{VEContext}()
+    include("state.jl")
 
     ## VEDA device library
     const libcache = Base.WeakKeyDict{VEContext, VEModule}()
@@ -82,9 +81,7 @@ module VEDA
         #ENV["VE_OMP_NUM_THREADS"] = 1
         # TODO: Do a lazy init
         vedaInit(0)
-        ctx = VEContext(0)
-        pctx[] = ctx
-        vedaCtxSetCurrent(ctx.handle)
+        state_ref[] = TaskLocalState()
         #atexit(vedaExit)
     end
 end # module
