@@ -255,8 +255,49 @@ function force_fast_math!(mod::LLVM.Module)
     return changed
 end
 
+function replace_vector_math_calls!(mod::LLVM.Module)
+    targets = (
+        "sin", "cos", "log", "exp", "pow", "sqrt", "exp2", "log10",
+    )
+    targets_re = Regex("^x((?:$(join(targets, "|")))f?).*_v(256|512)_N_v\$")
+
+    funcs = functions(mod)
+    ctx = LLVM.context(mod)
+    changed = false
+    for f in funcs, bb in blocks(f), inst in instructions(bb)
+        if !(inst isa LLVM.CallInst)
+            continue
+        end
+        original_func = called_value(inst)
+        original_name = LLVM.name(original_func)
+        m = match(targets_re, original_name)
+        if m === nothing
+            continue
+        end
+        replacement_name = (m[2] == "512") ? "__packed_vec_$(m[1])" : "__vec_$(m[1])"
+        replacement_func = if haskey(funcs, replacement_name)
+            funcs[replacement_name]
+        else
+            fty = eltype(llvmtype(original_func)::LLVM.PointerType)::LLVM.FunctionType
+            LLVM.Function(mod, replacement_name, fty)
+        end
+        replace_uses!(original_func, replacement_func)
+        callconv!(inst, LLVM.API.LLVMFastCallConv)
+        changed = true
+    end
+    for abs_name in ("xfabs_v256_N_v", "xfabsf_v256_N_v", "xfabsf_v512_N_v")
+        if haskey(funcs, abs_name)
+            abs_func = funcs[abs_name]
+            push!(function_attributes(abs_func), EnumAttribute("alwaysinline"; ctx))
+            changed = true
+        end
+    end
+    return changed
+end
+
 function fast_loop_vectorize!(pm::LLVM.PassManager)
     rv_loop_vectorize!(pm)
+    add!(pm, LLVM.ModulePass("ReplaceVectorMathCalls", replace_vector_math_calls!))
     add!(pm, LLVM.ModulePass("ForceFastMath", force_fast_math!))
 end
 
