@@ -295,9 +295,136 @@ function replace_vector_math_calls!(mod::LLVM.Module)
     return changed
 end
 
+function to_constant_array(cdv::LLVM.ConstantDataVector)
+    n = size(llvmtype(cdv))
+    a = Array{LLVM.Value}(undef, n)
+    for i in 1:n
+        @inbounds a[i] = LLVM.Value(LLVM.API.LLVMGetElementAsConstant(cdv, i-1))
+    end
+    return a
+end
+
+function to_int_array(cdv::LLVM.ConstantDataVector)
+    return convert.(Int, to_constant_array(cdv))
+end
+
+const SplatInst = Union{LLVM.ShuffleVectorInst, LLVM.ConstantDataVector}
+function unsplat(sv::LLVM.ShuffleVectorInst)
+    v1::LLVM.InsertElementInst, v2::LLVM.PoisonValue = operands(sv)
+    val::LLVM.PoisonValue, elt, idx::LLVM.ConstantInt = operands(v1)
+    if convert(Int, idx) != 0
+        throw(ArgumentError("unsplat: expected index 0"))
+    end
+    return elt
+end
+function unsplat(cdv::LLVM.ConstantDataVector)
+    constants = to_constant_array(cdv)
+    integers = convert.(Int, constants)
+    if any(integers .!= integers[1])
+        throw(ArgumentError("unsplat: expected all elements to be equal"))
+    end
+    return constants[1]
+end
+
+macro swap_if_reversed(expr)
+    if !Meta.isexpr(expr, :tuple) || length(expr.args) != 2 || !Meta.isexpr(expr.args[1], :(::)) || !Meta.isexpr(expr.args[2], :(::))
+        throw(ArgumentError("swap_if_reversed expects a tuple of two typed expressions"))
+    end
+    v1, t1 = esc.(expr.args[1].args)
+    v2, t2 = esc.(expr.args[2].args)
+    return quote
+        if $v1 isa $t2 && $v2 isa $t1
+            $v1, $v2 = $v2, $v1
+        end
+        $v1::$t1, $v2::$t2
+    end
+end
+
+function replace_gather_scatter_with_strided_access!(mod::LLVM.Module)
+    funcs = functions(mod)
+    changed = false
+    for f in funcs, bb in blocks(f), inst in collect(instructions(bb))
+        try
+            inst::LLVM.CallInst
+            m = match(r"llvm\.vp\.(gather|scatter)\.(v[^.]+)\.v\d+([^.]+)", LLVM.name(called_value(inst)))
+            if m === nothing
+                continue
+            end
+            original_op_str, vec_ty_str, ptr_ty_str = m.captures
+            op_str = (original_op_str == "gather" ? "load" : "store")
+            if op_str == "load"
+                ptrs, mask, avl = operands(inst)
+            else  # store
+                value, ptrs, mask, avl = operands(inst)
+            end
+            ptrs::LLVM.GetElementPtrInst
+            base_ptr, vector_indices = operands(ptrs)
+            vector_indices::LLVM.CallInst
+            if startswith(LLVM.name(called_value(vector_indices)), "llvm.vp.mul.")
+                vpmul = vector_indices
+                index1 = nothing
+            elseif startswith(LLVM.name(called_value(vector_indices)), "llvm.vp.add.")
+                vpadd_a, vpadd_b, vpadd_mask, vpadd_avl = operands(vector_indices)
+                @swap_if_reversed vpadd_a::LLVM.CallInst, vpadd_b::SplatInst
+                if !startswith(LLVM.name(called_value(vpadd_a)), "llvm.vp.mul.") || vpadd_mask != mask || vpadd_avl != avl
+                    continue
+                end
+                vpmul = vpadd_a
+                index1 = unsplat(vpadd_b)
+            else
+                continue
+            end
+            vpmul_a, vpmul_b, vpmul_mask, vpmul_avl = operands(vpmul)
+            @swap_if_reversed vpmul_a::LLVM.AddInst, vpmul_b::SplatInst
+            if vpmul_mask != mask || vpmul_avl != avl
+                continue
+            end
+            add_a, add_b = operands(vpmul_a)
+            @swap_if_reversed add_a::SplatInst, add_b::LLVM.ConstantDataVector
+            if to_int_array(add_b) != [0:255;]
+                continue
+            end
+            index2 = unsplat(add_a)
+            stride = unsplat(vpmul_b)
+
+            strided_name = "llvm.experimental.vp.strided.$(op_str).$(vec_ty_str).$(ptr_ty_str).$(llvmtype(stride))"
+            strided_func = if haskey(funcs, strided_name)
+                funcs[strided_name]
+            else
+                param_types = if op_str == "load"
+                    llvmtype.([base_ptr, stride, mask, avl])
+                else
+                    llvmtype.([value, base_ptr, stride, mask, avl])
+                end
+                LLVM.Function(mod, strided_name, LLVM.FunctionType(llvmtype(inst), param_types))
+            end
+            LLVM.Builder(LLVM.context(mod)) do builder
+                position!(builder, inst)
+                col_index = mul!(builder, index2, stride)
+                base_index = (index1 === nothing) ? col_index : add!(builder, index1, col_index)
+                base = inbounds_gep!(builder, base_ptr, [base_index])
+                stride_bytes = mul!(builder, stride, LLVM.ConstantInt(llvmtype(stride), sizeof(datalayout(mod), llvmeltype(base_ptr))))
+                args = (op_str == "load") ? [base, stride_bytes, mask, avl] : [value, base, stride_bytes, mask, avl]
+                new_inst = call!(builder, strided_func, args)
+                replace_uses!(inst, new_inst)
+                unsafe_delete!(bb, inst)
+            end
+            changed = true
+        catch e
+            if e isa TypeError || e isa BoundsError || e isa ArgumentError
+                continue
+            else
+                rethrow(e)
+            end
+        end
+    end
+    return changed
+end
+
 function fast_loop_vectorize!(pm::LLVM.PassManager)
     rv_loop_vectorize!(pm)
     add!(pm, LLVM.ModulePass("ReplaceVectorMathCalls", replace_vector_math_calls!))
+    add!(pm, LLVM.ModulePass("ReplaceGatherScatterWithStridedAccess", replace_gather_scatter_with_strided_access!))
     add!(pm, LLVM.ModulePass("ForceFastMath", force_fast_math!))
 end
 

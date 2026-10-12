@@ -90,6 +90,7 @@ Clone the LLVM.jl and GPUCompiler.jl packages. We need a certain branch for this
 mkdir dev
 cd dev
 git clone -b ef/ve-llvm14-rebase-v4.9.1 https://github.com/efocht/LLVM.jl.git LLVM
+(cd LLVM && git fetch https://github.com/JuliaLLVM/LLVM.jl.git 4b245f0853c9702dadb426508f2dc38aa5730843 && git cherry-pick --no-commit FETCH_HEAD)  # patch for poison values
 git clone -b ef/ve-rebase-v0.14.1 https://github.com/efocht/GPUCompiler.jl.git GPUCompiler
 cd ..
 ```
