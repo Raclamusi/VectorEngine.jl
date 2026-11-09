@@ -139,3 +139,20 @@ end
         return y * y
     end
 end
+
+
+## selection
+
+@device_override Base.min(x::Float64, y::Float64) = ccall("extern fmin", llvmcall, Cdouble, (Cdouble, Cdouble), x, y)
+@device_override Base.min(x::Float32, y::Float32) = ccall("extern fminf", llvmcall, Cfloat, (Cfloat, Cfloat), x, y)
+
+@device_override Base.FastMath.min_fast(x, y) = min(x, y)
+
+@device_override Base.max(x::Float64, y::Float64) = ccall("extern fmax", llvmcall, Cdouble, (Cdouble, Cdouble), x, y)
+@device_override Base.max(x::Float32, y::Float32) = ccall("extern fmaxf", llvmcall, Cfloat, (Cfloat, Cfloat), x, y)
+
+@device_override Base.FastMath.max_fast(x, y) = max(x, y)
+
+@device_override Base.minmax(x, y) = min(x, y), max(x, y)
+
+@device_override Base.FastMath.minmax_fast(x, y) = minmax(x, y)

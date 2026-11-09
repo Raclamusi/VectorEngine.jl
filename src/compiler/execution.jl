@@ -309,6 +309,49 @@ function replace_vector_math_calls!(mod::LLVM.Module)
     return changed
 end
 
+function replace_vector_selections_with_intrinsics!(mod::LLVM.Module)
+    intrinsic_table = Dict(
+        "xfminf_v512_N_vv" => "llvm.vp.minnum.v512f32",
+        "xfminf_v256_N_vv" => "llvm.vp.minnum.v256f32",
+        "xfmin_v256_N_vv" => "llvm.vp.minnum.v256f64",
+        "xfmaxf_v512_N_vv" => "llvm.vp.maxnum.v512f32",
+        "xfmaxf_v256_N_vv" => "llvm.vp.maxnum.v256f32",
+        "xfmax_v256_N_vv" => "llvm.vp.maxnum.v256f64",
+    )
+    funcs = functions(mod)
+    changed = false
+    for f in funcs, bb in blocks(f), inst in collect(instructions(bb))
+        if !(inst isa LLVM.CallInst)
+            continue
+        end
+        original_func = called_value(inst)
+        original_name = LLVM.name(original_func)
+        if !haskey(intrinsic_table, original_name)
+            continue
+        end
+        a, b = operands(inst)
+        is_vp = inst -> inst isa LLVM.CallInst && startswith(LLVM.name(called_value(inst)), "llvm.vp.")
+        vp_inst = is_vp(a) ? a : is_vp(b) ? b : continue
+        mask, avl = operands(vp_inst)[end-2:end]
+        intrinsic_name = intrinsic_table[original_name]
+        intrinsic_func = if haskey(funcs, intrinsic_name)
+            funcs[intrinsic_name]
+        else
+            param_types = llvmtype.([a, b, mask, avl])
+            LLVM.Function(mod, intrinsic_name, LLVM.FunctionType(llvmtype(inst), param_types))
+        end
+        LLVM.Builder(LLVM.context(mod)) do builder
+            position!(builder, inst)
+            args = [a, b, mask, avl]
+            new_inst = call!(builder, intrinsic_func, args)
+            replace_uses!(inst, new_inst)
+            unsafe_delete!(bb, inst)
+        end
+        changed = true
+    end
+    return changed
+end
+
 function to_constant_array(cdv::LLVM.ConstantDataVector)
     n = size(llvmtype(cdv))
     a = Array{LLVM.Value}(undef, n)
@@ -438,6 +481,7 @@ end
 function fast_loop_vectorize!(pm::LLVM.PassManager)
     rv_loop_vectorize!(pm)
     add!(pm, LLVM.ModulePass("ReplaceVectorMathCalls", replace_vector_math_calls!))
+    add!(pm, LLVM.ModulePass("ReplaceVectorSelectionsWithIntrinsics", replace_vector_selections_with_intrinsics!))
     add!(pm, LLVM.ModulePass("ReplaceGatherScatterWithStridedAccess", replace_gather_scatter_with_strided_access!))
     add!(pm, LLVM.ModulePass("ForceFastMath", force_fast_math!))
 end
