@@ -30,6 +30,7 @@ include(joinpath("device", "array.jl"))
 include(joinpath("device", "runtime.jl"))
 include(joinpath("device", "llvm.jl"))
 include(joinpath("device", "strings.jl"))
+include(joinpath("device", "math.jl"))
 
 # Compiler infrastructure
 include(joinpath("compiler", "compiler.jl"))

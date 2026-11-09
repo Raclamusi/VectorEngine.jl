@@ -39,3 +39,5 @@ function GPUCompiler.process_entry!(@nospecialize(job::CompilerJob), mod::LLVM.M
 
     return entry
 end
+
+GPUCompiler.method_table(@nospecialize(job::VECompilerJob)) = method_table

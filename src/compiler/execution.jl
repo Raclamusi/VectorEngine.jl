@@ -257,9 +257,12 @@ end
 
 function replace_vector_math_calls!(mod::LLVM.Module)
     targets = (
-        "sin", "cos", "log", "exp", "pow", "sqrt", "exp2", "log10",
+        "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+        "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+        "log", "log10", "exp", "exp10", "exp2", "expm1",
+        "pow", "sqrt", "cbrt", "lgamma", "tgamma", "erf", "erfc",
     )
-    targets_re = Regex("^x((?:$(join(targets, "|")))f?).*_v(256|512)_N_v\$")
+    targets_re = Regex("^x((?:$(join(targets, "|")))f?)(?:_.*)?_v(256|512)_N_(.+)\$")
 
     funcs = functions(mod)
     ctx = LLVM.context(mod)
@@ -274,7 +277,18 @@ function replace_vector_math_calls!(mod::LLVM.Module)
         if m === nothing
             continue
         end
-        replacement_name = (m[2] == "512") ? "__packed_vec_$(m[1])" : "__vec_$(m[1])"
+        base_name = m[1]
+        if base_name == "pow" || base_name == "powf"
+            suffix = (base_name == "powf") ? "f" : ""
+            if m[3] == "vl0"  # pow(vector, scalar)
+                base_name = "highreso_pows$suffix"
+            elseif m[3] == "l0v"  # pow(scalar, vector)
+                base_name = "highreso_spow$suffix"
+            else  # pow(vector, vector)
+                base_name = "highreso_pow$suffix"
+            end
+        end
+        replacement_name = (m[2] == "512") ? "__packed_vec_$base_name" : "__vec_$base_name"
         replacement_func = if haskey(funcs, replacement_name)
             funcs[replacement_name]
         else

@@ -191,3 +191,13 @@ llvmsize(ty) = error("Unknown size for type: $ty, typeof: $(typeof(ty))")
     end
 end
 
+
+# local method table for device functions
+Base.Experimental.@MethodTable(method_table)
+
+macro device_override(ex)
+    ex = macroexpand(__module__, ex)
+    esc(quote
+        Base.Experimental.@overlay($(VectorEngine.method_table), $ex)
+    end)
+end
